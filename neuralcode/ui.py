@@ -85,8 +85,27 @@ class UI:
             return False
         return answer.lower().startswith("y")
 
+    def budget_warning(self, total, limit):
+        self.console.print(
+            Padding(
+                Text(
+                    f"token budget reached: {total:,} used, limit is {limit:,}",
+                    style=f"bold {TOOL}",
+                ),
+                (1, 0, 0, 2),
+            )
+        )
+        try:
+            answer = prompt.read("  clear context and continue? (y/N)> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            return False
+        return answer.lower().startswith("y")
+
     def note(self, text):
         self.console.print(Padding(Text(text, style=MUTED), (1, 0, 0, 2)))
+
+    def context_reset(self):
+        self.note("context cleared - starting a fresh conversation in this working directory")
 
     def pick(self, title, rows):
         """Numbered list; returns the chosen index or None."""
@@ -196,7 +215,7 @@ class UI:
 
     # ---------------------------------------------------------------- usage
 
-    def usage(self, stats):
+    def usage(self, stats, budget_remaining=None, budget_total=None):
         for key, value in stats.items():
             self._totals[key] = self._totals.get(key, 0) + (value or 0)
 
@@ -206,6 +225,12 @@ class UI:
             if value
         )
         self.console.print(Padding(Text(parts, style=MUTED), (1, 0, 0, 2)))
+
+        if budget_total is not None:
+            used = budget_total - (budget_remaining or 0)
+            pct = int(100 * used / budget_total) if budget_total else 0
+            budget_line = f"budget: {used:,} / {budget_total:,} tokens ({pct}%)"
+            self.console.print(Padding(Text(budget_line, style=MUTED), (0, 0, 0, 2)))
 
     def summary(self):
         if not self._totals:

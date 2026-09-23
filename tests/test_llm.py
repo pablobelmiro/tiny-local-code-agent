@@ -9,6 +9,24 @@ def test_system_prompt_reflects_current_cwd_not_import_time_cwd(tmp_path, monkey
     assert str(tmp_path) in prompt
 
 
+def test_system_prompt_omits_skills_section_when_no_skills(monkeypatch):
+    monkeypatch.setattr(llm, "skills_prompt", lambda: "")
+
+    prompt = llm.system_prompt()
+
+    assert "skills available" not in prompt
+    assert "read_skill" not in prompt
+
+
+def test_system_prompt_includes_skills_section_when_skills_exist(monkeypatch):
+    monkeypatch.setattr(llm, "skills_prompt", lambda: "- foo: does foo things")
+
+    prompt = llm.system_prompt()
+
+    assert "skills available" in prompt
+    assert "- foo: does foo things" in prompt
+
+
 def test_reload_client_rebuilds_client_from_current_config(monkeypatch):
     monkeypatch.setattr(llm.config, "BASE_URL", "http://example-changed:11434/v1")
     monkeypatch.setattr(llm.config, "API_KEY", "changed-key")

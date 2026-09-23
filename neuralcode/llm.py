@@ -24,6 +24,18 @@ def reload_client():
 
 def system_prompt():
     """Computed at call time, not import time, so it follows os.chdir()."""
+    skills = skills_prompt()
+    skills_section = (
+        f"""
+You have skills available. Each one is a set of instructions for a task.
+If a skill matches what the user wants, call read_skill first and follow it.
+
+{skills}
+"""
+        if skills
+        else ""
+    )
+
     return f"""
 You are a coding agent. Your job is to code. Always code.
 Use the bash tool to inspect files.
@@ -52,12 +64,7 @@ grep rather than asking for it again. That file only exists for the current
 turn, so read it now or re-run the command later.
 
 Your current working directory is: {os.getcwd()}
-
-You have skills available. Each one is a set of instructions for a task.
-If a skill matches what the user wants, call read_skill first and follow it.
-
-{skills_prompt()}
-"""
+{skills_section}"""
 
 
 def call_llm(messages, tools=None):

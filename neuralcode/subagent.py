@@ -35,7 +35,9 @@ MAX_TURNS = 12  # a runaway explorer is worse than a missing answer
 WITHHELD = {"task", "write_todos", "str_replace", "write"}
 
 
-SYSTEM_PROMPT = f"""
+def system_prompt():
+    """Computed at call time, not import time, so it follows os.chdir()."""
+    return f"""
 You are an exploration subagent. You were given one question by a lead agent
 and you answer it. That is the whole job.
 
@@ -84,7 +86,7 @@ def task(description: str) -> str:
     # version of it, and not whatever the last subagent left behind - this
     # list is born here and dies at the return statement.
     messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": system_prompt()},
         {"role": "user", "content": description},
     ]
     ui.subagent(description)

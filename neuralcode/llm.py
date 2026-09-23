@@ -12,7 +12,9 @@ client = OpenAI(
     api_key=config.API_KEY,
 )
 
-SYSTEM_PROMPT = f"""
+def system_prompt():
+    """Computed at call time, not import time, so it follows os.chdir()."""
+    return f"""
 You are a coding agent. Your job is to code. Always code.
 Use the bash tool to inspect files.
 Use write_file to create files and str_replace to edit them.
@@ -74,7 +76,7 @@ if __name__ == "__main__":
     user_input = input("Enter your prompt> ")
 
     message, usage = call_llm([
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": system_prompt()},
         {"role": "user", "content": user_input},
     ])
 

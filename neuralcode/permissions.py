@@ -8,7 +8,10 @@ still stop and ask.
 from fnmatch import fnmatch
 from pathlib import Path
 
-PROJECT = Path.cwd().resolve()
+
+def _project_root():
+    """Computed at call time, not import time, so it follows os.chdir()."""
+    return Path.cwd().resolve()
 
 # Last matching rule wins, so put the catch-all first.
 BASH_RULES = {
@@ -106,7 +109,7 @@ def decide(command):
 
 
 def inside_project(path):
-    return PROJECT in Path(path).resolve().parents
+    return _project_root() in Path(path).resolve().parents
 
 
 def check(name, args):
@@ -115,6 +118,6 @@ def check(name, args):
         return decide(args["command"]), f"run: {args['command']}"
 
     if name in ("write_file", "str_replace") and not inside_project(args["path"]):
-        return "ask", f"{name} outside {PROJECT}: {args['path']}"
+        return "ask", f"{name} outside {_project_root()}: {args['path']}"
 
     return "allow", None

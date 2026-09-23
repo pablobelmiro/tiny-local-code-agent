@@ -44,13 +44,15 @@ def compacted(messages):
     WRITTEN = len(messages)
 
 
-def reset_context(system_prompt):
-    """Token budget forced a clean slate: keep only the system prompt.
+def reset_context(system_prompt, carry=None):
+    """Token budget forced a clean slate: keep only the system prompt, plus
+    any pending messages (e.g. the user's not-yet-answered request) named in
+    `carry` - otherwise the reset silently drops what the user just asked.
 
     Reuses the same on-disk shape as compaction (a `compacted` entry) since
     both mean "replace the messages going forward with this list".
     """
-    fresh = [{"role": "system", "content": system_prompt}]
+    fresh = [{"role": "system", "content": system_prompt}] + list(carry or [])
     compacted(fresh)
     return fresh
 

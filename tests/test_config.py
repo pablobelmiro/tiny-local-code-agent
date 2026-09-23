@@ -44,6 +44,18 @@ def test_config_uses_profile_values_when_profile_env_set(clean_env, monkeypatch)
     assert config.TOKEN_BUDGET == 60000
 
 
+def test_config_unknown_profile_raises_clear_system_exit(clean_env, monkeypatch):
+    (clean_env / "models.yaml").write_text(
+        "profiles:\n"
+        "  small-2b:\n"
+        "    model: qwen2.5-coder:1.5b\n"
+    )
+    monkeypatch.setenv("PROFILE", "does-not-exist")
+
+    with pytest.raises(SystemExit, match="does-not-exist"):
+        reload_config()
+
+
 def test_config_explicit_env_var_overrides_profile(clean_env, monkeypatch):
     (clean_env / "models.yaml").write_text(
         "profiles:\n"

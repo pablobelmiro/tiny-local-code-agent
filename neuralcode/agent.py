@@ -9,7 +9,7 @@ from . import history
 from . import session
 from . import workdir
 from .context import reminder
-from .llm import SYSTEM_PROMPT, call_llm
+from .llm import system_prompt, call_llm
 from . import sandbox
 from .todos import active_form
 from .tools import execute
@@ -28,7 +28,7 @@ def main():
 
     ui.banner(sandbox.name())
 
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    messages = [{"role": "system", "content": system_prompt()}]
     if cli.resume:
         saved = session.all_sessions()
         if saved:
@@ -48,13 +48,14 @@ def main():
             continue
 
         messages.append({"role": "user", "content": user_input})
+        turn_user_message = messages[-1]
 
         while True:
             if budget.should_warn():
                 confirmed = ui.budget_warning(budget.total(), budget.limit())
                 if not confirmed:
                     break
-                messages = session.reset_context(SYSTEM_PROMPT)
+                messages = session.reset_context(system_prompt(), carry=[turn_user_message])
                 budget.reset()
                 ui.context_reset()
 

@@ -18,7 +18,12 @@ API_KEY = os.environ["API_KEY"]
 
 _PROFILE_NAME = os.environ.get("PROFILE")
 _PROFILES = profiles.load_profiles(Path.cwd() / "models.yaml")
-_ACTIVE_PROFILE = profiles.resolve_profile(_PROFILES, _PROFILE_NAME) or {}
+try:
+    _ACTIVE_PROFILE = profiles.resolve_profile(_PROFILES, _PROFILE_NAME) or {}
+except KeyError:
+    raise SystemExit(
+        f"unknown PROFILE {_PROFILE_NAME!r}; available: {sorted(_PROFILES)}"
+    )
 
 
 def active_profile_name():

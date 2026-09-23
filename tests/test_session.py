@@ -51,3 +51,23 @@ def test_reset_context_returns_only_system_prompt_and_persists_it(tmp_path, monk
     assert reset_messages == [{"role": "system", "content": "sys"}]
     reloaded = session.load(session.CURRENT)
     assert reloaded == [{"role": "system", "content": "sys"}]
+
+
+def test_reset_context_carries_forward_pending_messages(tmp_path, monkeypatch):
+    monkeypatch.setattr(session.Path, "home", lambda: tmp_path)
+    project = tmp_path / "project"
+    project.mkdir()
+    monkeypatch.chdir(project)
+    session.CURRENT = "20260101-000003"
+    session.WRITTEN = 0
+    session.save([{"role": "system", "content": "sys"}])
+
+    pending_user_message = {"role": "user", "content": "please do X"}
+    reset_messages = session.reset_context("sys", carry=[pending_user_message])
+
+    assert reset_messages == [
+        {"role": "system", "content": "sys"},
+        {"role": "user", "content": "please do X"},
+    ]
+    reloaded = session.load(session.CURRENT)
+    assert reloaded == reset_messages

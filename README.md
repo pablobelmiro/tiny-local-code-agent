@@ -76,7 +76,10 @@ Useful env vars, all optional beyond `BASE_URL`/`API_KEY`:
 
 Slash commands available in the chat: `/sessions` (reopen a past chat in the
 current working directory), `/rewind` (go back in the conversation),
-`/compact` (manually summarize a long conversation).
+`/compact` (manually summarize a long conversation), `/reload` (re-read
+`MODEL`/`BASE_URL`/`PROFILE`/etc. from the environment and rebuild the LLM
+client, without restarting or losing the conversation - handy for switching
+models mid-session; export the new values first, then run `/reload`).
 
 ## Design notes
 

@@ -71,3 +71,26 @@ def test_config_explicit_env_var_overrides_profile(clean_env, monkeypatch):
 
     assert config.MODEL == "explicit-override"
     assert config.CONTEXT_WINDOW == 32000  # not overridden, still from profile
+
+
+def test_reload_picks_up_env_changes_without_reimporting(clean_env, monkeypatch):
+    config = reload_config()
+    assert config.MODEL == "deepseek/deepseek-v4-flash"
+
+    monkeypatch.setenv("MODEL", "new-model")
+    settings = config.reload()
+
+    assert config.MODEL == "new-model"
+    assert settings["MODEL"] == "new-model"
+
+
+def test_reload_unknown_profile_raises_value_error_and_keeps_old_settings(clean_env, monkeypatch):
+    config = reload_config()
+    assert config.MODEL == "deepseek/deepseek-v4-flash"
+
+    monkeypatch.setenv("PROFILE", "does-not-exist")
+
+    with pytest.raises(ValueError, match="does-not-exist"):
+        config.reload()
+
+    assert config.MODEL == "deepseek/deepseek-v4-flash"

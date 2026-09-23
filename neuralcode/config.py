@@ -13,33 +13,75 @@ if ENV_FILE.exists():
             key, value = line.split("=", 1)
             os.environ.setdefault(key.strip(), value.strip())
 
-BASE_URL = os.environ["BASE_URL"]
-API_KEY = os.environ["API_KEY"]
+# models.yaml lives next to wherever neuralcode was launched from. Captured
+# here, at import time - before agent.py's chdir into the session directory -
+# so reload() still finds it later even though the process has since moved.
+_MODELS_ROOT = Path.cwd()
 
-_PROFILE_NAME = os.environ.get("PROFILE")
-_PROFILES = profiles.load_profiles(Path.cwd() / "models.yaml")
-try:
-    _ACTIVE_PROFILE = profiles.resolve_profile(_PROFILES, _PROFILE_NAME) or {}
-except KeyError:
-    raise SystemExit(
-        f"unknown PROFILE {_PROFILE_NAME!r}; available: {sorted(_PROFILES)}"
-    )
+COMPACT_AT = 0.85  # compact once the prompt crosses this much of the window
+COMPACT_TO = 0.35  # and cut back to this much, so it does not retrigger soon
 
 
 def active_profile_name():
     return _PROFILE_NAME
 
 
-MODEL = os.environ.get("MODEL") or _ACTIVE_PROFILE.get("model", "deepseek/deepseek-v4-flash")
+def _resolve():
+    """Compute settings from the current environment and models.yaml.
 
-# How much room the model has, and how we spend it.
-CONTEXT_WINDOW = int(
-    os.environ.get("CONTEXT_WINDOW") or _ACTIVE_PROFILE.get("context_window", 128_000)
-)
-COMPACT_AT = 0.85  # compact once the prompt crosses this much of the window
-COMPACT_TO = 0.35  # and cut back to this much, so it does not retrigger soon
+    Raises ValueError on an unknown PROFILE, without touching any module
+    state - the caller decides what an invalid reload should do.
+    """
+    base_url = os.environ["BASE_URL"]
+    api_key = os.environ["API_KEY"]
 
-_env_budget = os.environ.get("TOKEN_BUDGET")
-TOKEN_BUDGET = (
-    int(_env_budget) if _env_budget else _ACTIVE_PROFILE.get("token_budget")
-)
+    profile_name = os.environ.get("PROFILE")
+    all_profiles = profiles.load_profiles(_MODELS_ROOT / "models.yaml")
+    try:
+        active_profile = profiles.resolve_profile(all_profiles, profile_name) or {}
+    except KeyError:
+        raise ValueError(
+            f"unknown PROFILE {profile_name!r}; available: {sorted(all_profiles)}"
+        )
+
+    model = os.environ.get("MODEL") or active_profile.get(
+        "model", "deepseek/deepseek-v4-flash"
+    )
+    context_window = int(
+        os.environ.get("CONTEXT_WINDOW") or active_profile.get("context_window", 128_000)
+    )
+    env_budget = os.environ.get("TOKEN_BUDGET")
+    token_budget = int(env_budget) if env_budget else active_profile.get("token_budget")
+
+    return {
+        "BASE_URL": base_url,
+        "API_KEY": api_key,
+        "_PROFILE_NAME": profile_name,
+        "MODEL": model,
+        "CONTEXT_WINDOW": context_window,
+        "TOKEN_BUDGET": token_budget,
+    }
+
+
+def _apply(settings):
+    globals().update(settings)
+
+
+def reload():
+    """Re-read env vars and models.yaml, picking up changes without a restart.
+
+    Validates everything before changing any setting, so a bad PROFILE typo
+    raises ValueError and leaves the running session on its old settings
+    rather than crashing it. Returns the new settings dict.
+    """
+    settings = _resolve()
+    _apply(settings)
+    return settings
+
+
+try:
+    _apply(_resolve())
+except ValueError as failure:
+    # Startup is the one place an invalid PROFILE should stop the process
+    # outright, with a message instead of a raw traceback.
+    raise SystemExit(str(failure))

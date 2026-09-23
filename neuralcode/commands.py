@@ -1,6 +1,8 @@
 """Slash commands. Anything typed starting with / lands here."""
 
 from . import compact as compaction
+from . import config
+from . import llm
 from . import sandbox
 from . import session
 from .ui import ui
@@ -9,6 +11,7 @@ COMMANDS = {
     "/rewind": "jump back to an earlier point in this chat",
     "/sessions": "open a past chat",
     "/compact": "summarise the history so far and free up the context window",
+    "/reload": "re-read MODEL/BASE_URL/PROFILE etc. without restarting",
 }
 
 
@@ -67,6 +70,26 @@ def compact(messages):
     return compacted
 
 
+def reload(messages):
+    """Re-read env vars and models.yaml, and rebuild the LLM client from them.
+
+    Leaves the conversation untouched - only the config underneath changes.
+    """
+    try:
+        settings = config.reload()
+    except ValueError as failure:
+        ui.note(f"reload failed: {failure}")
+        return messages
+
+    llm.reload_client()
+    ui.note(
+        f"reloaded - model: {settings['MODEL']}, "
+        f"context_window: {settings['CONTEXT_WINDOW']:,}, "
+        f"base_url: {settings['BASE_URL']}"
+    )
+    return messages
+
+
 def handle(command, messages):
     if command == "/compact":
         return compact(messages)
@@ -74,5 +97,7 @@ def handle(command, messages):
         return rewind(messages)
     if command == "/sessions":
         return sessions(messages)
+    if command == "/reload":
+        return reload(messages)
     ui.note("\n".join(f"{name}  -  {help}" for name, help in COMMANDS.items()))
     return messages

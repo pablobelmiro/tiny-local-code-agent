@@ -12,6 +12,16 @@ client = OpenAI(
     api_key=config.API_KEY,
 )
 
+
+def reload_client():
+    """Rebuild the client from the current config - call after config.reload()."""
+    global client
+    client = OpenAI(
+        base_url=config.BASE_URL,
+        api_key=config.API_KEY,
+    )
+
+
 def system_prompt():
     """Computed at call time, not import time, so it follows os.chdir()."""
     return f"""

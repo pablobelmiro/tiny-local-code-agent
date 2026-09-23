@@ -6,6 +6,7 @@ from . import budget
 from . import commands
 from . import compact
 from . import history
+from . import memory
 from . import session
 from . import workdir
 from .context import reminder
@@ -25,6 +26,7 @@ def main():
     repo_root = Path.cwd()
     session_dir = workdir.choose_or_create(repo_root, ui)
     os.chdir(session_dir)
+    memory.ensure_scaffold()
 
     ui.banner(sandbox.name())
 

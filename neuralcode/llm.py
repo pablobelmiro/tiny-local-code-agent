@@ -4,6 +4,7 @@ import os
 from openai import OpenAI
 
 from . import config
+from .memory import read_index as read_memory_index
 from .skills import skills_prompt
 from .tools import TOOLS, TOOL_SCHEMAS
 
@@ -36,6 +37,21 @@ If a skill matches what the user wants, call read_skill first and follow it.
         else ""
     )
 
+    memory_index = read_memory_index()
+    memory_section = (
+        f"""
+You have project memory in memory/INDEX.md - read it first, every session.
+It points to other files (profile.md, decisions.md, gotchas.md) with more
+detail; read_file them when you need what they hold. Update them, with
+write_file or str_replace, as you learn things worth remembering - keep
+INDEX.md itself short, and put the actual notes in the files it points to.
+
+{memory_index}
+"""
+        if memory_index
+        else ""
+    )
+
     return f"""
 You are a coding agent. Your job is to code. Always code.
 Use the bash tool to inspect files.
@@ -64,7 +80,7 @@ grep rather than asking for it again. That file only exists for the current
 turn, so read it now or re-run the command later.
 
 Your current working directory is: {os.getcwd()}
-{skills_section}"""
+{memory_section}{skills_section}"""
 
 
 def call_llm(messages, tools=None):

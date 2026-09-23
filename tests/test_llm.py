@@ -27,6 +27,23 @@ def test_system_prompt_includes_skills_section_when_skills_exist(monkeypatch):
     assert "- foo: does foo things" in prompt
 
 
+def test_system_prompt_omits_memory_section_when_no_index(monkeypatch):
+    monkeypatch.setattr(llm, "read_memory_index", lambda: "")
+
+    prompt = llm.system_prompt()
+
+    assert "memory/INDEX.md" not in prompt
+
+
+def test_system_prompt_includes_memory_section_when_index_exists(monkeypatch):
+    monkeypatch.setattr(llm, "read_memory_index", lambda: "- profile.md - stack info")
+
+    prompt = llm.system_prompt()
+
+    assert "memory/INDEX.md" in prompt
+    assert "- profile.md - stack info" in prompt
+
+
 def test_reload_client_rebuilds_client_from_current_config(monkeypatch):
     monkeypatch.setattr(llm.config, "BASE_URL", "http://example-changed:11434/v1")
     monkeypatch.setattr(llm.config, "API_KEY", "changed-key")

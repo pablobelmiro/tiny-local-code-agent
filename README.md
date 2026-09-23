@@ -30,6 +30,16 @@ starting point for understanding the base agent this one builds on.
   conversation but keeps every file the agent has created or edited in that
   directory. You can resume an existing session directory or start a fresh
   one each run.
+- **A simple, file-based project memory** (`memory/` inside each session
+  directory) — an `INDEX.md` the agent reads every session (kept small, so
+  it's always loaded), plus `profile.md`/`decisions.md`/`gotchas.md` it
+  reads and updates on demand with the same file tools it already has. No
+  embeddings, no retrieval, no extra dependencies — deliberately the
+  simplest thing that could work, so it stays reproducible on the smallest
+  machine.
+- **`/reload`** — re-reads `MODEL`/`BASE_URL`/`PROFILE`/etc. from the
+  environment and rebuilds the LLM client without restarting or losing the
+  conversation.
 
 ## Requirements
 

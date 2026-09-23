@@ -1,9 +1,13 @@
 import argparse
+import os
+from pathlib import Path
 
+from . import budget
 from . import commands
 from . import compact
 from . import history
 from . import session
+from . import workdir
 from .context import reminder
 from .llm import SYSTEM_PROMPT, call_llm
 from . import sandbox
@@ -17,6 +21,10 @@ def main():
     parser.add_argument("--resume", action="store_true", help="continue the last session")
     parser.add_argument("--debug", action="store_true", help="show the raw model response")
     cli = parser.parse_args()
+
+    repo_root = Path.cwd()
+    session_dir = workdir.choose_or_create(repo_root, ui)
+    os.chdir(session_dir)
 
     ui.banner(sandbox.name())
 
@@ -42,6 +50,14 @@ def main():
         messages.append({"role": "user", "content": user_input})
 
         while True:
+            if budget.should_warn():
+                confirmed = ui.budget_warning(budget.total(), budget.limit())
+                if not confirmed:
+                    break
+                messages = session.reset_context(SYSTEM_PROMPT)
+                budget.reset()
+                ui.context_reset()
+
             injection = reminder()
             ui.injection(injection["content"])
 
@@ -53,7 +69,8 @@ def main():
 
             messages.append(message.model_dump(exclude_none=True))
             session.save(messages)
-            ui.usage(usage)
+            budget.track(usage)
+            ui.usage(usage, budget_remaining=budget.remaining(), budget_total=budget.limit())
 
             if cli.debug:
                 ui.debug(message.model_dump(exclude_none=True))

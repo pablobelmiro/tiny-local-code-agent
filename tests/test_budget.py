@@ -89,3 +89,11 @@ def test_reset_clears_total_and_warn_state(with_budget):
 
     assert budget.total() == 0
     assert budget.should_warn() is False
+
+
+def test_limit_returns_configured_budget(with_budget):
+    assert budget.limit() == 1000
+
+
+def test_limit_returns_none_when_no_budget_configured(without_budget):
+    assert budget.limit() is None

@@ -28,6 +28,11 @@ def remaining():
     return config.TOKEN_BUDGET - _total
 
 
+def limit():
+    """The configured TOKEN_BUDGET itself (not remaining), or None."""
+    return config.TOKEN_BUDGET
+
+
 def should_warn():
     if config.TOKEN_BUDGET is None or config.TOKEN_BUDGET <= 0:
         return False

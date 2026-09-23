@@ -4,20 +4,24 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-PROJECT = str(Path.cwd().resolve()).replace("/", "-")
-SESSION_DIR = Path.home() / ".agents" / "sessions" / PROJECT
 CURRENT = datetime.now().strftime("%Y%m%d-%H%M%S")
 WRITTEN = 0  # how many messages are already on disk
 
 
+def _session_dir():
+    """Computed at call time, not import time, so it follows os.chdir()."""
+    project = str(Path.cwd().resolve()).replace("/", "-")
+    return Path.home() / ".agents" / "sessions" / project
+
+
 def path_for(session_id):
-    return SESSION_DIR / f"{session_id}.jsonl"
+    return _session_dir() / f"{session_id}.jsonl"
 
 
 def save(messages):
     """Append what is new. Never rewrite what is already on disk."""
     global WRITTEN
-    SESSION_DIR.mkdir(parents=True, exist_ok=True)
+    _session_dir().mkdir(parents=True, exist_ok=True)
     with path_for(CURRENT).open("a") as f:
         for message in messages[WRITTEN:]:
             f.write(json.dumps(message) + "\n")
@@ -38,6 +42,17 @@ def compacted(messages):
     with path_for(CURRENT).open("a") as f:
         f.write(json.dumps({"compacted": messages}) + "\n")
     WRITTEN = len(messages)
+
+
+def reset_context(system_prompt):
+    """Token budget forced a clean slate: keep only the system prompt.
+
+    Reuses the same on-disk shape as compaction (a `compacted` entry) since
+    both mean "replace the messages going forward with this list".
+    """
+    fresh = [{"role": "system", "content": system_prompt}]
+    compacted(fresh)
+    return fresh
 
 
 def load(session_id):
@@ -78,9 +93,10 @@ def title(messages):
 
 def all_sessions():
     """Newest first."""
-    if not SESSION_DIR.exists():
+    session_dir = _session_dir()
+    if not session_dir.exists():
         return []
     files = sorted(
-        SESSION_DIR.glob("*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True
+        session_dir.glob("*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True
     )
     return [{"id": p.stem, "title": title(load(p.stem))} for p in files]

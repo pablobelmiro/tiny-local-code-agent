@@ -1,0 +1,13 @@
+profiles:
+  small-2b:
+    model: qwen2.5-coder:1.5b
+    context_window: 32000
+    token_budget: 60000
+  medium-8b:
+    model: qwen2.5-coder:7b
+    context_window: 32000
+    token_budget: 120000
+  large-14b:
+    model: qwen2.5-coder:14b
+    context_window: 32000
+    token_budget: 200000

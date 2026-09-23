@@ -18,10 +18,13 @@ reasoning/cached tokens) exibido na UI, compactação automática de contexto, e
 um conjunto de tools (bash, leitura/escrita de arquivo, edição) com permissões
 e sandbox.
 
-Este spec cobre apenas as duas peças que faltam:
+Este spec cobre as peças que faltam:
 
 1. Perfis de modelo prontos para rodar em CPU com modelos pequenos.
-2. Um limite forte (hard budget) de tokens por sessão.
+2. Um limite forte (hard budget) de tokens por sessão, com reset de contexto
+   ao ser confirmado.
+3. Um subdiretório de trabalho por sessão dentro do repositório, escolhido
+   interativamente no início do agente.
 
 ## Fora de escopo (por agora)
 
@@ -97,10 +100,15 @@ chamadas ao LLM na sessão atual). Quando esse total cruza `TOKEN_BUDGET`
 2. Pede confirmação (`y/N`) antes de fazer a próxima chamada ao LLM.
 3. Se o usuário disser não, o turno atual é abortado sem chamar o LLM
    (mensagem do usuário já ficou salva na sessão, pode ser retomada depois).
-4. Se disser sim, o agente segue normalmente e só pergunta de novo depois de
-   ultrapassar o próximo múltiplo do budget (ex.: a cada +50% do budget
-   original acima do teto), para não interromper a cada turno depois que o
-   usuário já aceitou continuar.
+4. Se disser sim, o agente **limpa o contexto**: `messages` volta a conter só
+   `{"role": "system", "content": SYSTEM_PROMPT}` (equivalente a reiniciar a
+   conversa), o contador de budget é zerado, e o agente continua no mesmo
+   subdiretório de trabalho (Componente 3) — os arquivos criados/editados
+   até ali permanecem, só a conversa é resetada. Isso é diferente de
+   `/compact` (que resume o histórico mantendo continuidade): aqui é um
+   corte limpo, porque o objetivo é permitir sessões longas de trabalho no
+   mesmo diretório mesmo com um budget pequeno por "janela" de conversa.
+   O usuário é avisado explicitamente de que o contexto foi limpo.
 
 Um budget de por-turno foi considerado e descartado por simplicidade (ver
 pergunta ao usuário) — pode ser adicionado depois se o hard-stop por sessão
@@ -119,6 +127,8 @@ se mostrar insuficiente na prática.
 - `should_warn() -> bool`: `True` quando `total` cruzou `TOKEN_BUDGET` e
   ainda não avisamos para o múltiplo atual.
 - `mark_warned() -> None`: atualiza `_last_warned_at` para o múltiplo atual.
+- `reset() -> None`: zera `_total_tokens` e `_last_warned_at` (chamado após
+  o reset de contexto ser confirmado).
 
 ### Mudanças em `agent.py`
 
@@ -126,8 +136,76 @@ se mostrar insuficiente na prática.
 - No topo do loop interno (antes de `call_llm`), checar
   `budget.should_warn()`; se `True`, chamar `ui.budget_warning(...)` (nova
   função em `ui.py`) e pedir confirmação via `input()` (mesmo padrão simples
-  já usado em `ui.ask()`). Se negado, `break` do loop interno sem chamar o
-  LLM.
+  já usado em `ui.ask()`).
+  - Se negado: `break` do loop interno sem chamar o LLM (turno abortado).
+  - Se confirmado: `messages = [{"role": "system", "content": SYSTEM_PROMPT}]`,
+    `budget.reset()`, `session.save(messages)` (grava o corte como uma nova
+    sessão continuando no mesmo diretório — reaproveita `session.compacted`
+    ou um helper equivalente), avisa na UI que o contexto foi limpo, e segue
+    o loop normalmente a partir daí.
+
+## Componente 3: subdiretório de trabalho por sessão (`workdir.py`)
+
+### Motivação
+
+Modelos pequenos vão estourar o budget de tokens com frequência. Para que
+isso não signifique perder o diretório de trabalho (código/arquivos que o
+agente já criou), cada sessão opera dentro de um subdiretório dedicado em
+`sessions/<id>/` na raiz do fork. Ao estourar o budget e confirmar (ver
+Componente 2), só a conversa é resetada — o subdiretório e seus arquivos
+continuam. Uma nova execução do agente pode reaproveitar o mesmo
+subdiretório (abrindo uma nova conversa nele, ou retomando uma antiga via
+`/sessions`/`--resume` como já existe) ou criar um subdiretório novo.
+
+### Problema técnico a resolver
+
+Hoje `sandbox.py` (`PROJECT = Path.cwd().resolve()`) e `session.py`
+(`SESSION_DIR` derivado de `Path.cwd()`) calculam o diretório do projeto
+**no momento do import do módulo**. Isso precisa acontecer **depois** que o
+agente decidiu e trocou (`os.chdir`) para o subdiretório da sessão, não
+antes. A correção: tornar esses valores preguiçosos (computados na hora do
+uso, não como constante de módulo), para que reflitam o `cwd` já
+atualizado quando `wrap()`/`save()`/`load()` etc. rodam.
+
+- `sandbox.py`: `PROJECT` e a string `PROFILE` (que depende de `PROJECT`)
+  passam a ser calculados dentro de `wrap()` a cada chamada, em vez de
+  constantes de módulo.
+- `session.py`: `SESSION_DIR` vira uma função `_session_dir()` chamada onde
+  hoje `SESSION_DIR` é usado (`save`, `path_for`, `all_sessions`).
+  `PROJECT` (o slug do caminho) é computado dentro dela.
+
+Nenhuma outra lógica dessas duas peças muda — isso é só destravar o
+comportamento de import-time para call-time.
+
+### `neuralcode/workdir.py` (novo)
+
+- `SESSIONS_DIR_NAME = "sessions"`.
+- `list_existing(root: Path) -> list[Path]`: subdiretórios diretos de
+  `root/sessions/`, mais recentes primeiro (por mtime), cada um anotado com
+  o título da sessão mais recente ali dentro (reaproveitando
+  `session.title`/`session.all_sessions`, já que após o chdir esses módulos
+  enxergam aquele diretório).
+- `choose_or_create(root: Path) -> Path`: usa `ui.pick` (já existe, usado em
+  `/sessions` e `/rewind`) para listar os subdiretórios existentes com uma
+  opção extra "novo diretório de sessão" no topo. Escolher um existente
+  retorna aquele `Path`; escolher "novo" cria
+  `root/sessions/<YYYYMMDD-HHMMSS>/` (mesmo formato de timestamp que
+  `session.CURRENT` já usa) e retorna o `Path` recém-criado.
+
+### Mudanças em `agent.py`
+
+- Logo no início de `main()`, antes de qualquer outra coisa que dependa do
+  diretório de trabalho: `repo_root = Path.cwd()`, depois
+  `session_dir = workdir.choose_or_create(repo_root)`, depois
+  `os.chdir(session_dir)`.
+- `sandbox.name()` no banner (`ui.banner`) já reflete corretamente o novo
+  `cwd` sem mudança adicional, já que passa a computar `PROJECT` sob
+  demanda.
+- Escolher um subdiretório **existente** não reabre automaticamente a
+  última conversa — inicia uma sessão nova nesse diretório (comportamento
+  atual sem `--resume`). Para continuar uma conversa anterior naquele
+  mesmo diretório, o usuário usa `/sessions` (lista as sessões daquele
+  `cwd`, que é exatamente o subdiretório escolhido) ou `--resume`.
 
 ## UI (`ui.py`)
 
@@ -151,7 +229,11 @@ testes cobrem só a lógica pura, sem mockar o LLM real:
   existe, resolução de perfil por nome inválido (`None`).
 - `test_budget.py`: acumulação de `track()`, `should_warn()` cruzando o
   limite, não repetir aviso no mesmo múltiplo, `remaining()` quando budget
-  não configurado.
+  não configurado, `reset()` zerando o estado.
+- `test_workdir.py`: `list_existing` com diretório `sessions/` ausente
+  (retorna vazio) e com subdiretórios presentes (ordem por mtime);
+  `choose_or_create` criando um novo subdiretório com o formato de nome
+  esperado (usando `tmp_path` do pytest, sem tocar no repositório real).
 
 Validação end-to-end é manual: rodar `neuralcode` contra o Ollama local do
 usuário com cada perfil e observar tool-calling, uso de tokens e o aviso de
